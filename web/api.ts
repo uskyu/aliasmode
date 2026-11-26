@@ -1228,6 +1228,14 @@ export async function saveAgentSettings(input: { source: "aliasmode" | "own"; ba
   return (await agentRequest("/ui/api/agent/settings", { method: "POST", body: JSON.stringify(input) })).settings;
 }
 
+export async function fetchAgentModels(input: { baseUrl: string; apiKey?: string }): Promise<string[]> {
+  return (await agentRequest("/ui/api/agent/models", { method: "POST", body: JSON.stringify(input) })).models;
+}
+
+export async function testAgentConnection(input: { baseUrl: string; model: string; apiKey?: string }): Promise<void> {
+  await agentRequest("/ui/api/agent/test-connection", { method: "POST", body: JSON.stringify(input) });
+}
+
 export async function startAgentConversation(prompt: string): Promise<AgentConversation> {
   return (await agentRequest("/ui/api/agent/conversations", { method: "POST", body: JSON.stringify({ prompt }) })).conversation;
 }

@@ -203,7 +203,8 @@ export class AgentRunner {
       if (!baseUrl || !/^https?:\/\//.test(baseUrl)) throw new AgentError("Enter the model server URL, for example http://localhost:11434/v1");
       if (!model) throw new AgentError("Enter the model name");
     }
-    const apiKey = typeof body.apiKey === "string" ? body.apiKey.trim() : current.apiKey;
+    // A saved credential belongs to its configured server, not a newly entered URL.
+    const apiKey = typeof body.apiKey === "string" ? body.apiKey.trim() : baseUrl === current.baseUrl ? current.apiKey : undefined;
     const next: AgentSettings = { source: body.source, ...(baseUrl ? { baseUrl } : {}), ...(model ? { model } : {}), ...(apiKey ? { apiKey } : {}) };
     writeJson(this.settingsPath(), next, true);
     return this.settingsView();

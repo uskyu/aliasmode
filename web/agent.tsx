@@ -6,7 +6,9 @@ import {
   deleteAgentConversation,
   fetchAgent,
   fetchAgentConversation,
+  fetchAgentModels,
   fetchAgentUsage,
+  testAgentConnection,
   resumeAgentConversation,
   saveAgentSettings,
   sendAgentMessage,
@@ -652,36 +654,71 @@ function AgentSettingsPanel({ settings, onSaved, onClose }: {
   const [apiKey, setApiKey] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [models, setModels] = useState<string[] | null>(null);
+  const [search, setSearch] = useState("");
+  const [notice, setNotice] = useState<string | null>(null);
+  const [probe, setProbe] = useState<"models" | "test" | null>(null);
+  const locked = busy || probe !== null;
+  const sameServer = baseUrl.trim().replace(/\/+$/, "") === settings.baseUrl.trim().replace(/\/+$/, "");
+  const clearProbe = () => { setModels(null); setSearch(""); setNotice(null); setError(null); };
+  const probeInput = { baseUrl: baseUrl.trim(), apiKey: apiKey.trim() || (sameServer ? undefined : "") };
+  const runProbe = async (kind: "models" | "test") => {
+    setProbe(kind); setError(null); setNotice(null);
+    if (kind === "models") { setModels(null); setSearch(""); }
+    try {
+      if (kind === "models") {
+        const list = await fetchAgentModels(probeInput);
+        setModels(list);
+        setNotice(list.length ? t("Found {count} models", { count: list.length }) : t("No models returned. Enter a model ID manually."));
+      } else {
+        await testAgentConnection({ ...probeInput, model: model.trim() });
+        setNotice(t("Connection successful"));
+      }
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : String(failure));
+    } finally { setProbe(null); }
+  };
   const save = async (key: string | undefined) => {
     setBusy(true); setError(null);
     try {
-      onSaved(await saveAgentSettings(source === "own" ? { source, baseUrl: baseUrl.trim(), model: model.trim(), apiKey: key } : { source }));
+      onSaved(await saveAgentSettings(source === "own" ? { source, baseUrl: baseUrl.trim(), model: model.trim(), apiKey: key ?? (sameServer ? undefined : "") } : { source }));
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : String(failure));
     } finally { setBusy(false); }
   };
   const option = (value: "aliasmode" | "own", title: string, hint: string) =>
     <label className={`agent-source${source === value ? " on" : ""}`}>
-      <input type="radio" name="agent-source" checked={source === value} onChange={() => setSource(value)} />
+      <input type="radio" name="agent-source" checked={source === value} disabled={locked} onChange={() => { setSource(value); clearProbe(); }} />
       <span><strong>{title}</strong><small>{hint}</small></span>
       <Glyph name="check" className="sm agent-source-check" />
     </label>;
-  return <form className="agent-settings" onSubmit={(event) => { event.preventDefault(); void save(apiKey || undefined); }}>
+  return <form className="agent-settings" onSubmit={(event) => { event.preventDefault(); if (!locked) void save(apiKey.trim() || undefined); }}>
     <div role="radiogroup" aria-label={t("Model")} className="agent-sources">
       {option("aliasmode", t("AliasMode AI (recommended)"), t("Uses your free monthly credits, then your workspace balance."))}
       {option("own", t("Your own model (advanced)"), t("Any OpenAI-compatible server such as Ollama, LM Studio or OpenRouter."))}
     </div>
     {source === "own" && <div className="agent-own">
-      <label className="fld"><span>{t("Server URL")}</span><input className="input" value={baseUrl} placeholder="http://localhost:11434/v1" onChange={(event) => setBaseUrl(event.target.value)} /></label>
-      <label className="fld"><span>{t("Model")}</span><input className="input" value={model} placeholder="llama3.1" onChange={(event) => setModel(event.target.value)} /></label>
-      <label className="fld"><span>{t("API key")}</span><input className="input" type="password" autoComplete="off" value={apiKey} placeholder={settings.hasKey ? t("Saved. Leave blank to keep it.") : t("Optional")} onChange={(event) => setApiKey(event.target.value)} /></label>
-      {settings.hasKey && <button type="button" className="agent-link agent-remove-key" disabled={busy} onClick={() => void save("")}>{t("Remove saved key")}</button>}
+      <label className="fld"><span>{t("Server URL")}</span><input className="input" value={baseUrl} disabled={locked} placeholder="http://localhost:11434/v1" onChange={(event) => { setBaseUrl(event.target.value); clearProbe(); }} /></label>
+      <label className="fld"><span>{t("API key")}</span><input className="input" type="password" autoComplete="off" disabled={locked} value={apiKey} placeholder={settings.hasKey && sameServer ? t("Saved. Leave blank to keep it.") : t("Optional")} onChange={(event) => { setApiKey(event.target.value); clearProbe(); }} /></label>
+      {settings.hasKey && sameServer && <button type="button" className="agent-link agent-remove-key" disabled={locked} onClick={() => void save("")}>{t("Remove saved key")}</button>}
+      <button type="button" className="btn sm" disabled={locked || !baseUrl.trim()} onClick={() => void runProbe("models")}>{probe === "models" ? t("Loading models…") : t("Fetch models")}</button>
+      {models && models.length > 0 && <>
+        <label className="fld"><span>{t("Search models")}</span><input className="input" value={search} disabled={locked} onChange={(event) => setSearch(event.target.value)} /></label>
+        <label className="fld"><span>{t("Choose a model")}</span><select className="input" value={models.includes(model) && model.toLowerCase().includes(search.toLowerCase()) ? model : ""} disabled={locked} onChange={(event) => { if (event.target.value) { setModel(event.target.value); setNotice(null); setError(null); } }}>
+          <option value="">{t("Choose a model")}</option>
+          {models.filter((id) => id.toLowerCase().includes(search.toLowerCase())).map((id) => <option key={id} value={id}>{id}</option>)}
+        </select></label>
+      </>}
+      <label className="fld"><span>{t("Model")}</span><input className="input" value={model} disabled={locked} placeholder="llama3.1" onChange={(event) => { setModel(event.target.value); setNotice(null); setError(null); }} /></label>
+      <button type="button" className="btn sm" disabled={locked || !baseUrl.trim() || !model.trim()} onClick={() => void runProbe("test")}>{probe === "test" ? t("Testing connection…") : t("Test connection")}</button>
+      <p className="agent-settings-hint">{t("Connection testing sends a short model request and may incur provider charges.")}</p>
+      {notice && <p className="agent-settings-hint" role="status">{notice}</p>}
     </div>}
     <p className="agent-settings-hint">{t("Page content the agent reads is sent to the model you choose.")}</p>
     {error && <div className="agent-error" role="alert">{error}</div>}
     <div className="agent-settings-actions">
       <button type="button" className="btn ghost sm" onClick={onClose}>{t("Cancel")}</button>
-      <button type="submit" className="btn primary sm" disabled={busy || (source === "own" && (!baseUrl.trim() || !model.trim()))}>{busy ? t("Saving…") : t("Save")}</button>
+      <button type="submit" className="btn primary sm" disabled={locked || (source === "own" && (!baseUrl.trim() || !model.trim()))}>{busy ? t("Saving…") : t("Save")}</button>
     </div>
   </form>;
 }
