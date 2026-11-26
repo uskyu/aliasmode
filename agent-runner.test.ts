@@ -240,6 +240,8 @@ describe("AgentRunner", () => {
     if (process.platform !== "win32") expect(statSync(join(root, "agent", "settings.json")).mode & 0o777).toBe(0o600);
     expect(agent.saveSettings({ source: "aliasmode" }).hasKey).toBe(true);
     expect(agent.saveSettings({ source: "aliasmode", apiKey: "" }).hasKey).toBe(false);
+    agent.saveSettings({ source: "own", baseUrl: "https://first.example/v1", model: "a", apiKey: "secret" });
+    expect(agent.saveSettings({ source: "own", baseUrl: "https://second.example/v1", model: "b" }).hasKey).toBe(false);
   });
 
   test("AliasMode credits need a Cloud account", () => {

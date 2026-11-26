@@ -67,6 +67,7 @@ import { readdirSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { validAgentAuthorization } from "./agent-control.ts";
 import { ScriptError, prefetchPythonFor, type ScriptLibrary, type ScriptSupervisor } from "./scripts.ts";
 import { AgentError, type AgentRunner } from "./agent-runner.ts";
+import { discoverProviderModels, providerInput, ProviderProbeError, testProviderConnection } from "./agent-provider.ts";
 import type { PythonRuntime } from "./python-runtime.ts";
 import { runtimeDownloads } from "./runtime-download.ts";
 import { loadServices } from "./services-directory.ts";
@@ -766,6 +767,15 @@ export async function handleUiRequest(
       if (pathname === "/ui/api/agent/settings" && req.method === "POST") {
         return noStoreJson({ ok: true, settings: agent.saveSettings(await req.json()) });
       }
+      if (pathname === "/ui/api/agent/models" && req.method === "POST") {
+        const input = providerInput(await req.json(), agent.settings());
+        return noStoreJson({ ok: true, models: await discoverProviderModels(input) });
+      }
+      if (pathname === "/ui/api/agent/test-connection" && req.method === "POST") {
+        const input = providerInput(await req.json(), agent.settings());
+        await testProviderConnection(input);
+        return noStoreJson({ ok: true });
+      }
       if (pathname === "/ui/api/agent/conversations" && req.method === "POST") {
         return noStoreJson({ ok: true, conversation: agent.start((await req.json())?.prompt) });
       }
@@ -786,7 +796,7 @@ export async function handleUiRequest(
       }
       return noStoreJson({ ok: false, error: "Unknown agent operation" }, 404);
     } catch (error) {
-      const status = error instanceof AgentError || error instanceof CloudApiError ? error.status
+      const status = error instanceof AgentError || error instanceof ProviderProbeError || error instanceof CloudApiError ? error.status
         : error instanceof CloudRequestError ? 502 : error instanceof SyntaxError || error instanceof URIError ? 400 : 500;
       return noStoreJson({ ok: false, error: error instanceof SyntaxError ? "Invalid JSON request" : msg(error) }, status);
     }

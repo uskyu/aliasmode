@@ -243,7 +243,7 @@
 .agent-model-chip .icon:first-child { color: var(--accent); }
 .agent-model-chip .icon:last-child { color: var(--faint); }
 .agent-model-chip:hover:not(:disabled), .agent-model-chip[aria-expanded="true"] { background: var(--surface-hover); }
-.agent-model-pop { top: calc(100% + 6px); left: 0; width: 360px; padding: 14px; line-height: 1.5; text-align: left; }
+.agent-model-pop { top: calc(100% + 6px); left: 0; width: 360px; padding: 14px; line-height: 1.5; text-align: left; max-height: min(70vh, 640px); overflow-y: auto; }
 .agent-model-pop.up { top: auto; bottom: calc(100% + 8px); transform-origin: bottom left; }
 .agent-settings { display: flex; flex-direction: column; gap: 12px; }
 .agent-sources { display: flex; flex-direction: column; gap: 8px; }
